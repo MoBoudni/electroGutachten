@@ -1,0 +1,28 @@
+server:
+  port: 8081
+
+spring:
+  datasource:
+    url: jdbc:h2:mem:electrogutachten;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ''
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+    open-in-view: false  # ← Vaadin-Warning fix
+  h2:
+    console:
+      enabled: true
+  security:
+    user:
+      name: admin
+      password: admin123
+  ai:                    # ← KORREKT: spring.ai!
+    openai:
+      enabled: false     # ← OpenAI deaktivieren
+      api-key: dummy     # ← Dummy
+
+vaadin:                     # ← Top-Level!
+  allowed-packages: de.electrogutachten  # ← Scan fix
