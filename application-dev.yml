@@ -1,0 +1,35 @@
+# application-dev.yml — nur für lokale Entwicklung
+# Überschreibt application.yml wenn Profil "dev" aktiv ist
+
+spring:
+  # Security für Dev komplett deaktivieren — kein JWT-Server nötig
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.oauth2.resource.servlet.OAuth2ResourceServerAutoConfiguration
+
+  # Flyway: Schema automatisch erstellen statt nur validieren
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+
+  # Datenbank: lokale PostgreSQL aus Docker
+  datasource:
+    url: jdbc:postgresql://localhost:5432/electrogutachten
+    username: eg_user
+    password: HIER_DAS_ECHTE_PASSWORT
+
+  # Spring AI: Dummy-Key für Dev (KI-Calls schlagen fehl, aber App startet)
+  ai:
+    openai:
+      api-key: sk-dev-dummy-key-not-real
+
+# Logging für Dev: mehr Details
+logging:
+  level:
+    de.electrogutachten: DEBUG
+    org.springframework.web: DEBUG
+    org.hibernate.SQL: DEBUG
+
+# Server-Port
+server:
+  port: 8081

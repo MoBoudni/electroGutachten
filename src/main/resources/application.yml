@@ -1,28 +1,74 @@
-server:
-  port: 8081
-
 spring:
+  application:
+    name: electroGutachten
+
+  # ── Datenbank ──────────────────────────────────────────────
   datasource:
-    url: jdbc:h2:mem:electrogutachten;DB_CLOSE_DELAY=-1
-    driver-class-name: org.h2.Driver
-    username: sa
-    password: ''
+    url: jdbc:postgresql://localhost:5432/electrogutachten
+    username: ${DB_USER:eg_user}
+    password: ${DB_PASSWORD:eg_pass}
+    hikari:
+      maximum-pool-size: 10
+      connection-timeout: 30000
+
   jpa:
     hibernate:
-      ddl-auto: create-drop
-    show-sql: true
-    open-in-view: false  # ← Vaadin-Warning fix
-  h2:
-    console:
-      enabled: true
-  security:
-    user:
-      name: admin
-      password: admin123
-  ai:                    # ← KORREKT: spring.ai!
-    openai:
-      enabled: false     # ← OpenAI deaktivieren
-      api-key: dummy     # ← Dummy
+      ddl-auto: validate          # Flyway übernimmt Schema-Migration
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
 
-vaadin:                     # ← Top-Level!
-  allowed-packages: de.electrogutachten  # ← Scan fix
+  # ── Spring AI / OpenAI ─────────────────────────────────────
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY}
+      chat:
+        options:
+          model: gpt-4o            # GPT-4 Vision (gpt-4o unterstützt Images)
+          max-tokens: 1500
+          temperature: 0.1         # Niedrig — deterministische Schadensklassifikation
+
+  # ── Security / OAuth2 JWT ──────────────────────────────────
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${JWT_ISSUER_URI:https://auth.electrogutachten.de}
+          jwk-set-uri: ${JWT_JWK_URI:https://auth.electrogutachten.de/.well-known/jwks.json}
+
+# ── Server ────────────────────────────────────────────────────
+server:
+  port: 8081
+  error:
+    include-message: never        # Kein Stack-Trace in HTTP-Responses (DSGVO)
+
+# ── Actuator ──────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+
+# ── OpenAPI / Swagger ─────────────────────────────────────────
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+  info:
+    title: electroGutachten API
+    version: 1.0.0
+    description: KI-Plattform für Hochvolt-Gutachten in der E-Mobilität
+
+# ── Logging ───────────────────────────────────────────────────
+logging:
+  level:
+    de.electrogutachten: INFO
+    org.springframework.ai: DEBUG   # KI-Prompts für Debugging sichtbar machen
+    org.hibernate.SQL: WARN
