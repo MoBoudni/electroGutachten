@@ -1,0 +1,38 @@
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "build": {
+    "builder": "DOCKERFILE"
+  },
+  "deploy": {
+    "startCommand": "java -jar /app/app.jar",
+    "restartPolicy": "ALWAYS"
+  },
+  "services": {
+    "app": {
+      "image": "ghcr.io/deinusername/electro-gutachten:latest",
+      "env": {
+        "SPRING_PROFILES_ACTIVE": "prod",
+        "SPRING_DATASOURCE_URL": "${{Postgres.DATABASE_URL}}",
+        "SPRING_AI_OPENAI_API_KEY": "${{OPENAI_API_KEY}}",
+        "OLLAMA_ENABLED": "false"
+      }
+    },
+    "postgres": {
+      "image": "pgvector/pgvector:pg16",
+      "env": {
+        "POSTGRES_DB": "electro_gutachten",
+        "POSTGRES_USER": "electro",
+        "POSTGRES_PASSWORD": "${{secrets.POSTGRES_PASSWORD}}"
+      },
+      "volumeMounts": [
+        {
+          "mountPath": "/var/lib/postgresql/data",
+          "volume": "postgres_data"
+        }
+      ]
+    },
+    "redis": {
+      "image": "redis:7-alpine"
+    }
+  }
+}

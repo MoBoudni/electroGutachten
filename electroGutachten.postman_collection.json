@@ -1,0 +1,259 @@
+{
+  "info": {
+    "name": "electroGutachten API v3.2",
+    "description": "KI-Plattform für Hochvolt-Gutachten · E-Mobilität · Spring Boot 3.2\n\nVollständige Collection aller REST-Endpunkte.\nReihenfolge entspricht dem Gutachten-Workflow:\nUC-01 → UC-02 → UC-03 → UC-04 → UC-05b → PDF\n\nVorbedingung:\n- App läuft auf localhost:8080 (mvn spring-boot:run -Dspring-boot.run.profiles=dev)\n- PostgreSQL läuft (docker-compose up -d postgres)\n- Im Dev-Profil: keine Authentifizierung erforderlich",
+    "_postman_id": "electrogutachten-api-v32",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+
+  "variable": [
+    { "key": "baseUrl",      "value": "http://localhost:8080",         "description": "Backend-URL (Dev: 8080, Prod: HTTPS via Traefik)" },
+    { "key": "gutachtenId",  "value": "ersetze-mit-echter-uuid",       "description": "UUID aus Schritt UC-01 Response" },
+    { "key": "gutachterId",  "value": "ersetze-mit-echter-uuid",       "description": "Gutachter-UUID für Archiv-Abfrage" },
+    { "key": "tenantId",     "value": "demo",                          "description": "Mandanten-ID (Dev: demo)" }
+  ],
+
+  "item": [
+
+    {
+      "name": "🟢 UC-01 — Neues Gutachten anlegen",
+      "request": {
+        "method": "POST",
+        "url": { "raw": "{{baseUrl}}/api/gutachten" },
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"vin\": \"JTDKN3DU9A0012345\",\n  \"hersteller\": \"Toyota\",\n  \"modell\": \"Prius\",\n  \"baujahr\": 2021,\n  \"fahrzeugTyp\": \"FULL_HYBRID\",\n  \"gutachterId\": \"00000000-0000-0000-0000-000000000001\",\n  \"nennspannungV\": 201.6,\n  \"kapazitaetAh\": 6.5\n}"
+        },
+        "description": "Legt ein neues HV-Gutachten an.\n\n✅ Vorbedingung: App läuft, PostgreSQL erreichbar.\n📋 Aus der Response: 'id' in Variable 'gutachtenId' speichern.\n🔑 VIN: Toyota Prius (JTDKN3DU9A0012345) — 17 Zeichen, ISO 3779."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+              "pm.test('Gutachten-Nummer vorhanden', () => {",
+              "    const body = pm.response.json();",
+              "    pm.expect(body.gutachtenNummer).to.match(/^EG-\\d{4}-\\d{5}$/);",
+              "    pm.collectionVariables.set('gutachtenId', body.id);",
+              "    console.log('Gutachten-ID gespeichert:', body.id);",
+              "});",
+              "pm.test('Status ist ENTWURF', () => {",
+              "    pm.expect(pm.response.json().status).to.equal('ENTWURF');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🔒 UC-02 — HV-Freischaltung dokumentieren",
+      "request": {
+        "method": "POST",
+        "url": { "raw": "{{baseUrl}}/api/gutachten/{{gutachtenId}}/analyse" },
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"gutachtenId\": \"{{gutachtenId}}\",\n  \"bilderBase64\": [],\n  \"gutachterHinweis\": \"Freischaltprotokoll UC-02 — HV-Protokoll muss vorher über direkten Entity-Aufruf gesetzt werden\"\n}",
+          "description": "Hinweis: HV-Freischaltung wird über das Domain-Objekt HvSicherheitsProtokoll gesetzt.\nFür direkten Protokoll-Endpunkt: POST /api/gutachten/{id}/freischaltung (geplant in v4)"
+        },
+        "description": "⚠️ Dieser Endpunkt startet die KI-Analyse (UC-03).\nDas HV-Sicherheitsprotokoll muss vorher im System gesetzt sein.\n\nIm Dev-Profil kann das Protokoll direkt über die DB gesetzt werden:\nUPDATE gutachten SET hv_freigeschaltet = true WHERE id = '...';"
+      }
+    },
+
+    {
+      "name": "🔒 UC-02b — HV-Freischaltprotokoll setzen (DB-Shortcut Dev)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/actuator/health",
+          "description": "Im Dev-Profil: Direkt in PostgreSQL:\nUPDATE gutachten\nSET hv_freigeschaltet = true,\n    protokoll_vollstaendigkeit_pct = 100,\n    gemessene_spannung_v = 3.2,\n    isolationswiderstand_kohm = 485.0\nWHERE id = '{{gutachtenId}}';\n\nDanach UC-03 aufrufen."
+        },
+        "description": "Gesundheitscheck — zeigt ob App läuft.\nFür HV-Protokoll im Dev: direkt SQL (siehe Beschreibung)."
+      }
+    },
+
+    {
+      "name": "🤖 UC-03 — KI-Schadensanalyse starten (GPT-4 Vision)",
+      "request": {
+        "method": "POST",
+        "url": { "raw": "{{baseUrl}}/api/gutachten/{{gutachtenId}}/analyse" },
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"gutachtenId\": \"{{gutachtenId}}\",\n  \"bilderBase64\": [\n    \"data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/xAAUAQEAAAAAAAAAAAAAAAAAAAAA/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEQMRAD8AJQAB/9k=\"\n  ],\n  \"gutachterHinweis\": \"Möglicher Lichtbogenschaden am HV-Kabel sichtbar. Bitte genau analysieren.\"\n}",
+          "description": "Startet die KI-Bildanalyse via GPT-4 Vision.\n\n⚠️ Voraussetzung:\n1. OPENAI_API_KEY in .env gesetzt\n2. HV-Protokoll vollständig (hv_freigeschaltet = true)\n3. Echte HV-Bilder als Base64 einfügen\n\n📷 Echte Bilder konvertieren:\n  - Mac/Linux: base64 -i bild.jpg | tr -d '\\n'\n  - Windows PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes('bild.jpg'))"
+        },
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+                "pm.test('Status ist ANALYSIERT', () => {",
+                "    const body = pm.response.json();",
+                "    pm.expect(body.status).to.equal('ANALYSIERT');",
+                "});",
+                "pm.test('Konfidenz-Score vorhanden', () => {",
+                "    const body = pm.response.json();",
+                "    pm.expect(body.konfidenzScore).to.not.be.null;",
+                "    console.log('Hauptschaden:', body.hauptSchadenTyp, '| Score:', body.konfidenzScore);",
+                "});"
+              ]
+            }
+          }
+        ]
+      }
+    },
+
+    {
+      "name": "✅ Gutachten abrufen (UC-Abfrage)",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/api/gutachten/{{gutachtenId}}" },
+        "description": "Ruft ein einzelnes Gutachten ab.\n\nGibt vollständiges GutachtenResponse-DTO zurück:\n- Fahrzeugdaten, VIN, Status\n- KI-Analyse: Schadensklasse, Konfidenz, Begründung\n- Batterie: SoH, Restwert\n- Sicherheitsprotokoll: hvFreigeschaltet, Vollständigkeit\n- Reparaturkosten\n\nZielgruppe: GUTACHTER + VERSICHERUNG (nach OAuth2-Aktivierung)"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+              "pm.test('VIN korrekt', () => {",
+              "    const body = pm.response.json();",
+              "    pm.expect(body.vin).to.equal('JTDKN3DU9A0012345');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "📋 Archivliste abrufen (tenant-isoliert)",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/api/gutachten" },
+        "description": "Alle Gutachten des aktuellen Tenants.\n\nTenant-Isolation: Im Dev-Profil wird tenant_id aus dem Request-Context gelesen.\nIn Produktion: aus JWT-Claim 'tenant_id'."
+      }
+    },
+
+    {
+      "name": "👤 Gutachten nach Gutachter abrufen",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/api/gutachten/gutachter/{{gutachterId}}" },
+        "description": "Alle Gutachten eines bestimmten Gutachters.\nNützlich für persönliches Archiv im Dashboard."
+      }
+    },
+
+    {
+      "name": "🔄 UC-05b — Wiedereinschaltprotokoll (FA-3.8, DGUV V3 §6)",
+      "request": {
+        "method": "POST",
+        "url": { "raw": "{{baseUrl}}/api/gutachten/{{gutachtenId}}/wiedereinschalten" },
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"gutachtenId\": \"{{gutachtenId}}\",\n  \"handschuhSchutzklasse\": 0,\n  \"handschuhGeprueft\": true,\n  \"spannungNachWiedereinschaltenV\": 201.6\n}",
+          "description": "Dokumentiert die kontrollierte Wiederinbetriebnahme nach DGUV Vorschrift 3 §6.\n\nFelder:\n- handschuhSchutzklasse: 0–4 nach EN 60903 (0 = bis 1.000 V AC, Standard HV)\n- handschuhGeprueft: Lufttest vor Einsatz bestätigt (Pflicht DGUV 209-093)\n- spannungNachWiedereinschaltenV: Kontrollmessung nach Einschalten\n\n⚠️ Nur aus Status FERTIG möglich!"
+        },
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "exec": [
+                "pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+                "pm.test('Wiedereinschalt dokumentiert', () => {",
+                "    const body = pm.response.json();",
+                "    pm.expect(body.protokollVollstaendigkeitProzent).to.be.above(80);",
+                "    console.log('Protokoll-Vollständigkeit:', body.protokollVollstaendigkeitProzent + '%');",
+                "});"
+              ]
+            }
+          }
+        ]
+      }
+    },
+
+    {
+      "name": "📄 FA-4.4 — PDF-Gutachten herunterladen (iText 8)",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/api/gutachten/{{gutachtenId}}/pdf" },
+        "header": [
+          { "key": "Accept", "value": "application/pdf" }
+        ],
+        "description": "Generiert und lädt das vollständige PDF-Gutachten herunter.\n\nInhalt:\n- GTÜ/DGuSV-konformes Layout\n- HV-Sicherheitsprotokoll (DGUV 209-093)\n- PSA-Schutzklasse (EN 60903, FA-3.7)\n- Wiedereinschaltprotokoll (FA-3.8)\n- KI-Schadensanalyse mit Konfidenz-Score\n- Batterie-Restwertbewertung\n- Reparaturkostenkalkulation\n- DSGVO-Audit-Trail\n\nFormat: PDF 2.0, revisionssicher\n\n⚠️ Voraussetzung: iText 8 Dependency in pom.xml aktiv"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+              "pm.test('Content-Type ist PDF', () => {",
+              "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/pdf');",
+              "});",
+              "pm.test('Content-Disposition gesetzt', () => {",
+              "    const cd = pm.response.headers.get('Content-Disposition');",
+              "    pm.expect(cd).to.include('attachment');",
+              "    pm.expect(cd).to.include('.pdf');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🔍 Health-Check",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/actuator/health" },
+        "description": "Spring Boot Actuator Health-Endpoint.\nZeigt Status der App, DB-Verbindung und Redis."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('App ist UP', () => {",
+              "    pm.response.to.have.status(200);",
+              "    pm.expect(pm.response.json().status).to.equal('UP');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "📖 Swagger UI öffnen",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/swagger-ui.html" },
+        "description": "OpenAPI 3.0 Swagger UI.\nVollständige interaktive API-Dokumentation."
+      }
+    },
+
+    {
+      "name": "📊 OpenAPI JSON Spec",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/v3/api-docs" },
+        "description": "OpenAPI 3.0 Spezifikation als JSON.\nKann direkt von Versicherungs-Systemen importiert werden\nfür automatische Client-Code-Generierung."
+      }
+    }
+  ]
+}

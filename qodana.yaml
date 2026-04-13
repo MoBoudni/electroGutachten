@@ -1,0 +1,63 @@
+# =============================================
+# Qodana Configuration – electroGutachten v5.0
+# =============================================
+version: "1.0"
+
+# Linter-Image: Aktuellste stabile JVM-Version (April 2026)
+linter: jetbrains/qodana-jvm:2025.2
+
+# Empfohlenes Profil (umfassend, aber produktiv)
+profile:
+  name: qodana.recommended
+
+# JDK-Version (exakt passend zum Projekt)
+jdk:
+  version: "21"
+
+# IDE-Konfiguration (für bessere Spring-/Vaadin-Erkennung)
+ide: idea
+
+# =============================================
+# Ausschlüsse (keine unnötigen Analysen)
+# =============================================
+exclude:
+  - name: All
+    paths:
+      - "target"
+      - "build"
+      - ".idea"
+      - ".mvn"
+      - "node_modules"
+      - "src/test"                    # Tests separat analysieren
+      - "**/generated-sources"
+      - "**/generated"
+      - "docs/**"
+
+# =============================================
+# Baseline (nur neue Probleme in CI/CD anzeigen)
+# =============================================
+baseline:
+  includeAbsent: true
+  branch: main
+
+# =============================================
+# Quality Gates / Failure Conditions
+# =============================================
+failureConditions:
+  severityThresholds:
+    any: 0          # 0 = Build bricht bei JEDEM neuen Problem ab
+    critical: 0
+  # testCoverageThresholds:      # Nur in Ultimate / Ultimate Plus verfügbar
+  #   fresh: 70
+  #   total: 50
+
+# =============================================
+# Weitere Einstellungen
+# =============================================
+inspection:
+  enabled: true
+
+# Cloud-Integration (für Qodana Cloud / GitHub)
+cloud:
+  project: electro-gutachten
+  # token: ${{ secrets.QODANA_TOKEN }}   # wird in GitHub Actions gesetzt
